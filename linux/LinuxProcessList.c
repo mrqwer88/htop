@@ -567,25 +567,35 @@ static bool LinuxProcessList_readSmapsFile(LinuxProcess* process, const char* di
 #ifdef HAVE_OPENVZ
 
 static void LinuxProcessList_readOpenVZData(LinuxProcess* process, const char* dirname, const char* name) {
+   process->ctid = 0;
+   process->vpid = 0;
    if ( (access("/proc/vz", R_OK) != 0)) {
       process->vpid = process->super.pid;
-      process->ctid = 0;
       return;
    }
+
    char filename[MAX_NAME+1];
-   xSnprintf(filename, MAX_NAME, "%s/%s/stat", dirname, name);
+   xSnprintf(filename, MAX_NAME, "%s/%s/status", dirname, name);
    FILE* file = fopen(filename, "r");
    if (!file)
       return;
-   (void) fscanf(file,
-      "%*32u %*32s %*1c %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %*32u %*32u %*32u %*32u %*32u "
-      "%*32u %*32u %32u %32u",
-      &process->vpid, &process->ctid);
+   char buffer[PROC_LINE_LENGTH + 1];
+   while (fgets(buffer, PROC_LINE_LENGTH, file)) {
+      if (String_startsWith(buffer, "envID:")) {
+         unsigned int ctid;
+         int ok = sscanf(buffer, "envID:\t%32u", &ctid);
+         if (ok >= 1) {
+            process->ctid = ctid;
+         }
+      }
+      else if (String_startsWith(buffer, "VPid:")) {
+         unsigned int vpid;
+         int ok = sscanf(buffer, "VPid:\t%32u", &vpid);
+         if (ok >= 1) {
+            process->vpid = vpid;
+         }
+      }
+   }
    fclose(file);
    return;
 }
